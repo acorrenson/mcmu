@@ -1,4 +1,6 @@
-use crate::buff::Buff;
+use std::collections::{HashMap, HashSet};
+
+use crate::{buff::Buff, ts::Ts};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Instr {
@@ -146,12 +148,54 @@ impl Prog {
             instructions,
         })
     }
+
+    pub fn compile(&self) -> Ts<String, String> {
+        let mut ts = Ts::<String, String>::new(vec![], vec![], vec![], vec![]);
+        for instr in &self.instructions {
+            match instr {
+                Instr::Label(state, label) => {
+                    ts.labels
+                        .insert(*state, HashSet::from_iter(label.iter().cloned()));
+                }
+                Instr::Trans(state1, action, state2) => {
+                    if !ts.states.contains(state1) {
+                        ts.states.insert(state1.clone());
+                    }
+                    if !ts.states.contains(state2) {
+                        ts.states.insert(state2.clone());
+                    }
+                    if let Some(post) = ts.transitions.get_mut(&state1) {
+                        post.insert(action.clone(), *state2);
+                    } else {
+                        ts.transitions.insert(
+                            *state1,
+                            HashMap::from_iter(vec![(action.clone(), *state2)].into_iter()),
+                        );
+                    }
+                }
+                Instr::Loop(state, action) => {
+                    if !ts.states.contains(state) {
+                        ts.states.insert(state.clone());
+                    }
+                    if let Some(post) = ts.transitions.get_mut(&state) {
+                        post.insert(action.clone(), *state);
+                    } else {
+                        ts.transitions.insert(
+                            *state,
+                            HashMap::from_iter(vec![(action.clone(), *state)].into_iter()),
+                        );
+                    }
+                }
+            }
+        }
+        ts
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::Instr;
-    use crate::{buff::Buff, lang::Prog};
+    use crate::{buff::Buff, lang::Prog, ts::Ts};
 
     #[test]
     fn test_1() {
@@ -202,6 +246,29 @@ mod test {
                     Instr::Loop(2, "act2".to_string()),
                 ]
             }
+        )
+    }
+
+    #[test]
+    fn test_5() {
+        let prog = "
+        (props P Q R)
+        (actions act1)
+        (label 1 P)
+        (label 2 Q)
+        (trans 1 act1 2)
+        (loop 2 act2)";
+        assert_eq!(
+            Prog::parse(prog.to_string()).unwrap().compile(),
+            Ts::new(
+                vec![1, 2],
+                vec![],
+                vec![(1, vec!["P".to_string()]), (2, vec!["Q".to_string()])],
+                vec![
+                    (1, vec![("act1".to_string(), 2)]),
+                    (2, vec![("act2".to_string(), 2)])
+                ]
+            )
         )
     }
 }

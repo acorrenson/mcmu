@@ -6,14 +6,22 @@ use std::{
 
 use crate::mu::Mu;
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Ts<A, P>
 where
     A: Display,
+    A: Eq,
+    A: Clone,
+    A: Hash,
+    P: Eq,
+    P: Display,
+    P: Clone,
+    P: Hash,
 {
-    states: HashSet<u32>,
-    initials: HashSet<u32>,
-    labels: HashMap<u32, HashSet<P>>,
-    transitions: HashMap<u32, HashMap<A, u32>>,
+    pub(crate) states: HashSet<u32>,
+    pub(crate) initials: HashSet<u32>,
+    pub(crate) labels: HashMap<u32, HashSet<P>>,
+    pub(crate) transitions: HashMap<u32, HashMap<A, u32>>,
 }
 
 impl<A, P> Ts<A, P>
