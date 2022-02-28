@@ -1,6 +1,5 @@
 digraph {
   node [shape=circle]
-  1 [shape=doublecircle]
+  1 [shape=doublecircle, label="{A}"]
   1 -> 2 [label=" a"];
 }
-
