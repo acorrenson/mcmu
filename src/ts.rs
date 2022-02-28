@@ -10,8 +10,8 @@ pub struct Ts<A>
 where
     A: Display,
 {
-    states: Vec<u32>,
-    initials: Vec<u32>,
+    states: HashSet<u32>,
+    initials: HashSet<u32>,
     transitions: HashMap<u32, HashMap<A, u32>>,
 }
 
@@ -28,17 +28,13 @@ where
         transitions: Vec<(u32, Vec<(A, u32)>)>,
     ) -> Self {
         Ts {
-            states,
-            initials,
+            states: states.into_iter().collect(),
+            initials: initials.into_iter().collect(),
             transitions: transitions
                 .into_iter()
                 .map(|(s, post)| (s, HashMap::from_iter(post.into_iter())))
                 .collect(),
         }
-    }
-
-    pub fn states(&self) -> HashSet<u32> {
-        HashSet::from_iter(self.states.clone().into_iter())
     }
 
     pub fn succ(&self, x: &u32, act: &A) -> Option<&u32> {
@@ -50,64 +46,47 @@ where
         self.initials.iter().all(|s| sat.contains(s))
     }
 
-    pub fn sat(&self, spec: &Mu<A, u32>, env: HashMap<String, Vec<u32>>) -> Vec<u32> {
+    pub fn sat(&self, spec: &Mu<A, u32>, env: HashMap<String, HashSet<u32>>) -> HashSet<u32> {
         match spec {
             Mu::Lit(p) => {
                 let s = [*p].into_iter().collect();
-                self.states().intersection(&s).cloned().collect()
+                self.states.intersection(&s).cloned().collect()
             }
             Mu::Neg(a) => {
-                let s1 = self.states();
                 let s2 = self.sat(a, env).iter().cloned().collect::<HashSet<u32>>();
-                s1.difference(&s2).cloned().collect()
+                self.states.difference(&s2).cloned().collect()
             }
             Mu::And(a, b) => {
-                let s1 = self
-                    .sat(a, env.clone())
-                    .iter()
-                    .cloned()
-                    .collect::<HashSet<u32>>();
-                let s2 = self
-                    .sat(b, env.clone())
-                    .iter()
-                    .cloned()
-                    .collect::<HashSet<u32>>();
-                s1.intersection(&s2).cloned().collect()
+                let sat_a = self.sat(a, env.clone());
+                let sat_b = self.sat(b, env.clone());
+                sat_a.intersection(&sat_b).cloned().collect()
             }
             Mu::Or(a, b) => {
-                let s1 = self
-                    .sat(a, env.clone())
-                    .iter()
-                    .cloned()
-                    .collect::<HashSet<u32>>();
-                let s2 = self
-                    .sat(b, env.clone())
-                    .iter()
-                    .cloned()
-                    .collect::<HashSet<u32>>();
-                s1.union(&s2).cloned().collect()
+                let sat_a = self.sat(a, env.clone());
+                let sat_b = self.sat(b, env.clone());
+                sat_a.union(&sat_b).cloned().collect()
             }
             Mu::Gfp(_x, _a) => todo!(),
             Mu::All(act, a) => {
-                let sa = self.sat(a, env.clone());
-                let mut s = Vec::<u32>::new();
-                for s1 in self.states() {
-                    if self.succ(&s1, &act).iter().all(|s2| sa.contains(s2)) {
-                        s.push(s1)
+                let sat_a = self.sat(a, env.clone());
+                let mut sat_all = HashSet::<u32>::new();
+                for s1 in &self.states {
+                    if self.succ(&s1, &act).iter().all(|s2| sat_a.contains(s2)) {
+                        sat_all.insert(s1.clone());
                     }
                 }
-                s
+                sat_all
             }
             Mu::Lfp(_, _) => todo!(),
             Mu::Ex(act, a) => {
-                let sa = self.sat(a, env.clone());
-                let mut s = Vec::<u32>::new();
-                for s1 in self.states() {
-                    if self.succ(&s1, &act).iter().any(|s2| sa.contains(s2)) {
-                        s.push(s1)
+                let sat_a = self.sat(a, env.clone());
+                let mut sat_ex = HashSet::<u32>::new();
+                for s1 in &self.states {
+                    if self.succ(&s1, &act).iter().any(|s2| sat_a.contains(s2)) {
+                        sat_ex.insert(s1.clone());
                     }
                 }
-                s
+                sat_ex
             }
             Mu::Var(x) => env.get(x).unwrap().clone(),
         }
