@@ -110,13 +110,11 @@ impl Buff<char> {
 
     pub fn expect_u32(&mut self) -> Option<u32> {
         self.trim();
-        let mut num = 0;
-        let mut c = self.top()?;
-        while c.is_digit(10) {
-            num = 10 * num + c.to_digit(10).unwrap();
-            self.pop();
-            if let Some(new_c) = self.top() {
-                c = new_c;
+        let mut num = self.expect_digit()?.to_digit(10).unwrap();
+        while let Some(c) = self.top() {
+            if c.is_digit(10) {
+                self.pop();
+                num += 10 * num + c.to_digit(10).unwrap();
             } else {
                 break;
             }
@@ -127,6 +125,15 @@ impl Buff<char> {
     pub fn expect_alpha(&mut self) -> Option<char> {
         let c = self.next()?;
         if c.is_ascii_alphabetic() {
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    pub fn expect_digit(&mut self) -> Option<char> {
+        let c = self.next()?;
+        if c.is_digit(10) {
             Some(c)
         } else {
             None

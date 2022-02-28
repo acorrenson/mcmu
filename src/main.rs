@@ -1,23 +1,31 @@
-use mu_calc::{mu::Mu, ts::Ts};
+use std::{env::args, fs};
+
+use mu_calc::{lang::Prog, mu::Mu};
+
+fn run(input: String, spec: &Mu<String, String>) -> Result<bool, String> {
+    let prog = Prog::parse(input).ok_or("Syntax error while parsing the input file")?;
+    prog.check()?;
+    let ts = prog.compile();
+    Ok(ts.check(spec))
+}
 
 fn main() {
-    let ts = Ts::new(
-        vec![1, 2],
-        vec![1],
-        vec![(1, vec!['A']), (2, vec!['B'])],
-        vec![(1, vec![('a', 2)])],
-    );
-    let spec = Mu::All('b', Box::new(Mu::Lit('B')));
-
-    println!("system:\n{}", ts);
-    println!("spec:\n{}", spec);
-    println!("correct:{}", ts.check(&spec))
+    let file = args().collect::<Vec<String>>()[1].clone();
+    let res = fs::read_to_string(file.as_str())
+        .map_err(|err| format!("{}", err))
+        .and_then(|input| run(input, &Mu::Lit("A".to_string())));
+    match res {
+        Ok(b) => println!("Result of the verification: {}", b),
+        Err(err) => eprintln!("Verification failed: {}", err),
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
     use std::collections::HashMap;
+
+    use mu_calc::ts::Ts;
 
     use super::*;
 

@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{buff::Buff, ts::Ts};
+use crate::{buff::Buff, mu::Mu, ts::Ts};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Instr {
+    SetProps(Vec<String>),
+    SetActions(Vec<String>),
+    SetInit(Vec<u32>),
+    SetSpec(Mu<String, String>),
     Label(u32, Vec<String>),
     Trans(u32, String, u32),
     Loop(u32, String),
@@ -19,6 +23,17 @@ impl Instr {
         }
         buff.restore();
         Some(symbols)
+    }
+
+    fn parse_num_list(buff: &mut Buff<char>) -> Option<Vec<u32>> {
+        let mut nums = vec![buff.expect_u32()?];
+        buff.save();
+        while let Some(l) = buff.expect_u32() {
+            nums.push(l);
+            buff.update_save();
+        }
+        buff.restore();
+        Some(nums)
     }
 
     fn parse_label(buff: &mut Buff<char>) -> Option<Self> {
@@ -46,24 +61,34 @@ impl Instr {
         Some(Instr::Trans(state1, action, state2))
     }
 
-    fn parse_actions_decl(buff: &mut Buff<char>) -> Option<Vec<String>> {
+    fn parse_actions_decl(buff: &mut Buff<char>) -> Option<Self> {
         buff.trim();
         buff.expect('(')?;
         buff.expect_token("actions".to_string())?;
         let actions = Self::parse_symb_list(buff)?;
         buff.trim();
         buff.expect(')')?;
-        Some(actions)
+        Some(Instr::SetActions(actions))
     }
 
-    fn parse_props_decl(buff: &mut Buff<char>) -> Option<Vec<String>> {
+    fn parse_props_decl(buff: &mut Buff<char>) -> Option<Self> {
         buff.trim();
         buff.expect('(')?;
         buff.expect_token("props".to_string())?;
-        let actions = Self::parse_symb_list(buff)?;
+        let props = Self::parse_symb_list(buff)?;
         buff.trim();
         buff.expect(')')?;
-        Some(actions)
+        Some(Instr::SetProps(props))
+    }
+
+    fn parse_init_decl(buff: &mut Buff<char>) -> Option<Self> {
+        buff.trim();
+        buff.expect('(')?;
+        buff.expect_token("init".to_string())?;
+        let initials = Self::parse_num_list(buff)?;
+        buff.trim();
+        buff.expect(')')?;
+        Some(Instr::SetInit(initials))
     }
 
     fn parse_loop(buff: &mut Buff<char>) -> Option<Self> {
@@ -85,6 +110,18 @@ impl Instr {
         }
         buff.restore_save();
         if let i @ Some(_) = Self::parse_label(buff) {
+            return i;
+        }
+        buff.restore_save();
+        if let i @ Some(_) = Self::parse_props_decl(buff) {
+            return i;
+        }
+        buff.restore_save();
+        if let i @ Some(_) = Self::parse_actions_decl(buff) {
+            return i;
+        }
+        buff.restore_save();
+        if let i @ Some(_) = Self::parse_init_decl(buff) {
             return i;
         }
         buff.restore_save();
@@ -115,14 +152,20 @@ impl Instr {
                     Err(format!("undeclared action {}", act))
                 }
             }
+            Instr::SetProps(_) => Ok(()),
+            Instr::SetActions(_) => Ok(()),
+            Instr::SetInit(_) => Ok(()),
+            Instr::SetSpec(_) => Ok(()),
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prog {
+    spec: Vec<Mu<String, String>>,
     props: Vec<String>,
     actions: Vec<String>,
+    init: Vec<u32>,
     instructions: Vec<Instr>,
 }
 
@@ -137,20 +180,30 @@ impl Prog {
     pub fn parse(string: String) -> Option<Self> {
         let buff = &mut Buff::new(string.chars().collect());
         let mut instructions = vec![];
-        let props = Instr::parse_props_decl(buff)?;
-        let actions = Instr::parse_actions_decl(buff)?;
+        let mut actions = vec![];
+        let mut init = vec![];
+        let mut spec = vec![];
+        let mut props = vec![];
         while let Some(i) = Instr::parse(buff) {
-            instructions.push(i);
+            match i {
+                Instr::SetProps(new_props) => props.append(&mut new_props.clone()),
+                Instr::SetActions(new_actions) => actions.append(&mut new_actions.clone()),
+                Instr::SetInit(new_init) => init.append(&mut new_init.clone()),
+                Instr::SetSpec(new_spec) => spec.push(new_spec),
+                _ => instructions.push(i),
+            }
         }
         Some(Prog {
+            spec,
+            init,
             props,
             actions,
             instructions,
         })
     }
 
-    pub fn compile(&self) -> Ts<String, String> {
-        let mut ts = Ts::<String, String>::new(vec![], vec![], vec![], vec![]);
+    pub fn compile(self) -> Ts<String, String> {
+        let mut ts = Ts::<String, String>::new(vec![], self.init, vec![], vec![]);
         for instr in &self.instructions {
             match instr {
                 Instr::Label(state, label) => {
@@ -186,6 +239,7 @@ impl Prog {
                         );
                     }
                 }
+                _ => (),
             }
         }
         ts
@@ -229,6 +283,7 @@ mod test {
         let prog = "
           (props P Q R)
           (actions act1)
+          (init 1)
           (label 1 P)
           (label 2 Q)
           (trans 1 act1 2)
@@ -237,6 +292,7 @@ mod test {
         assert_eq!(
             Prog::parse(prog.to_string()).unwrap(),
             Prog {
+                spec: vec![],
                 props: vec!["P".to_string(), "Q".to_string(), "R".to_string()],
                 actions: vec!["act1".to_string()],
                 instructions: vec![
@@ -244,7 +300,8 @@ mod test {
                     Instr::Label(2, vec!["Q".to_string()]),
                     Instr::Trans(1, "act1".to_string(), 2),
                     Instr::Loop(2, "act2".to_string()),
-                ]
+                ],
+                init: vec![1]
             }
         )
     }
