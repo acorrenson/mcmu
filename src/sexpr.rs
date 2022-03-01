@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use crate::buff::Buff;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Sexpr {
     Sym(String),
     Num(u32),
@@ -11,27 +11,15 @@ pub enum Sexpr {
 
 impl Sexpr {
     pub fn is_symb(&self) -> bool {
-        if let Sexpr::Sym(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Sexpr::Sym(_))
     }
 
     pub fn is_num(&self) -> bool {
-        if let Sexpr::Num(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Sexpr::Num(_))
     }
 
     pub fn is_list(&self) -> bool {
-        if let Sexpr::List(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Sexpr::List(_))
     }
 
     pub fn get_symb(self) -> String {
@@ -58,15 +46,8 @@ impl Sexpr {
         }
     }
 
-    pub fn parse_list(buff: &mut Buff<char>) -> Option<Vec<Self>> {
-        let mut sexps = vec![Self::parse(buff)?];
-        buff.save();
-        while let Some(l) = Self::parse(buff) {
-            sexps.push(l);
-            buff.update_save();
-        }
-        buff.restore();
-        Some(sexps)
+    fn parse_list(buff: &mut Buff<char>) -> Option<Vec<Self>> {
+        buff.expect_list(Self::parse)
     }
 
     pub fn parse(buff: &mut Buff<char>) -> Option<Self> {
@@ -74,6 +55,7 @@ impl Sexpr {
         match buff.top()? {
             '0'..='9' => buff.expect_u32().map(Sexpr::Num),
             '(' => {
+                buff.pop();
                 let list = Self::parse_list(buff)?;
                 buff.trim();
                 buff.expect(')')?;
@@ -81,6 +63,15 @@ impl Sexpr {
             }
             _ => buff.expect_symb().map(Sexpr::Sym),
         }
+    }
+}
+
+impl FromStr for Sexpr {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Sexpr::parse(&mut Buff::new(s.chars().collect()))
+            .ok_or_else(|| "Sexpr: parsing error".to_string())
     }
 }
 
@@ -98,5 +89,92 @@ impl Display for Sexpr {
                 write!(f, "({})", ls)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{sexpr::Sexpr, sexpr::Sexpr::*};
+
+    #[test]
+    fn test_1() {
+        assert_eq!(
+            "(a b c d)".parse::<Sexpr>().unwrap(),
+            Sexpr::List(vec![
+                Sym("a".to_string()),
+                Sym("b".to_string()),
+                Sym("c".to_string()),
+                Sym("d".to_string())
+            ])
+        );
+    }
+
+    #[test]
+    fn test_2() {
+        assert_eq!(
+            "(1 2 3 4)".parse::<Sexpr>().unwrap(),
+            Sexpr::List(vec![Num(1), Num(2), Num(3), Num(4),])
+        );
+    }
+
+    #[test]
+    fn test_3() {
+        assert_eq!(
+            "(1 a 2 b)".parse::<Sexpr>().unwrap(),
+            Sexpr::List(vec![
+                Num(1),
+                Sym("a".to_string()),
+                Num(2),
+                Sym("b".to_string())
+            ])
+        );
+    }
+
+    #[test]
+    fn test_4() {
+        assert!("( )".parse::<Sexpr>().is_err());
+    }
+
+    #[test]
+    fn test_5() {
+        assert!("(!)".parse::<Sexpr>().is_err());
+    }
+
+    #[test]
+    fn test_6() {
+        assert!("(a!)".parse::<Sexpr>().is_err());
+    }
+
+    #[test]
+    fn test_7() {
+        assert!("(1!)".parse::<Sexpr>().is_err());
+    }
+
+    #[test]
+    fn test_8() {
+        assert_eq!(
+            "(a1 a2 a3 a4)".parse::<Sexpr>().unwrap(),
+            Sexpr::List(vec![
+                Sym("a1".to_string()),
+                Sym("a2".to_string()),
+                Sym("a3".to_string()),
+                Sym("a4".to_string()),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_9() {
+        assert_eq!(
+            "(a1 (a2 a3 a4))".parse::<Sexpr>().unwrap(),
+            Sexpr::List(vec![
+                Sym("a1".to_string()),
+                List(vec![
+                    Sym("a2".to_string()),
+                    Sym("a3".to_string()),
+                    Sym("a4".to_string()),
+                ])
+            ])
+        );
     }
 }
