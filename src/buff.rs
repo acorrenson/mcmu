@@ -83,6 +83,29 @@ where
         }
     }
 
+    pub fn expect_cond<P>(&mut self, cond: P) -> Option<T>
+    where
+        P: FnOnce(&T) -> bool,
+    {
+        let y = self.next()?;
+        if cond(&y) {
+            Some(y)
+        } else {
+            None
+        }
+    }
+
+    pub fn expect_list<U>(&mut self, pre: fn(&T) -> bool, conv: fn(T) -> U) -> Option<Vec<U>> {
+        let mut list = vec![conv(self.expect_cond(pre)?)];
+        self.save();
+        while let Some(l) = self.expect_cond(pre) {
+            list.push(conv(l));
+            self.update_save();
+        }
+        self.restore();
+        Some(list)
+    }
+
     pub fn expect_one_of(&mut self, alt: Vec<T>) -> Option<()> {
         let y = self.next()?;
         if alt.contains(&y) {
