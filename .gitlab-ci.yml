@@ -1,0 +1,25 @@
+image: rust:latest
+
+stages:
+  - check
+  - test
+
+check_code:
+  stage: check
+  before_script:
+    - rustup component add clippy
+  script:
+    - cargo clippy
+
+check_format:
+  stage: check
+  before_script:
+    - rustup component add rustfmt
+  script:
+    - cargo fmt -- --check
+
+run_tests:
+  stage: test
+  script:
+    - cargo test
+
