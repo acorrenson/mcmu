@@ -1,4 +1,6 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
+
+use crate::buff::Buff;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Mu<A, P>
@@ -18,55 +20,8 @@ where
     Var(String),
 }
 
-struct Buff {
-    data: Vec<char>,
-    pos: usize,
-}
-
-impl Buff {
-    fn not_blank(c: &char) -> bool {
-        !vec![' ', '\t', '\n'].contains(c)
-    }
-
-    fn new(input: String) -> Self {
-        Buff {
-            data: input.chars().filter(Self::not_blank).collect(),
-            pos: 0,
-        }
-    }
-
-    fn get(&self) -> Option<char> {
-        self.data.get(self.pos).cloned()
-    }
-
-    fn get_u32(&mut self) -> Option<u32> {
-        let mut num = 0;
-        let mut c = self.get()?;
-        while c.is_digit(10) {
-            num = 10 * num + c.to_digit(10).unwrap();
-            self.pop();
-            if let Some(new_c) = self.get() {
-                c = new_c;
-            } else {
-                break;
-            }
-        }
-        Some(num)
-    }
-
-    fn pop(&mut self) {
-        self.pos += 1;
-    }
-
-    fn next(&mut self) -> Option<char> {
-        let c = self.get();
-        self.pos += 1;
-        c
-    }
-}
-
 impl Mu<char, u32> {
-    fn parse_var(buff: &mut Buff) -> Option<char> {
+    fn parse_var(buff: &mut Buff<char>) -> Option<char> {
         let c = buff.next()?;
         match c {
             'a'..='z' | 'A'..='Z' => Some(c),
@@ -74,15 +29,15 @@ impl Mu<char, u32> {
         }
     }
 
-    fn parse_act(buff: &mut Buff) -> Option<char> {
+    fn parse_act(buff: &mut Buff<char>) -> Option<char> {
         buff.next()
     }
 
-    fn parse_atom(buff: &mut Buff) -> Option<Self> {
-        let c = buff.get()?;
+    fn parse_atom(buff: &mut Buff<char>) -> Option<Self> {
+        let c = buff.top()?;
         match c {
             '0'..='9' => {
-                let n = buff.get_u32()?;
+                let n = buff.expect_u32()?;
                 Some(Mu::Lit(n))
             }
             'a'..='z' | 'A'..='Z' => {
@@ -92,21 +47,19 @@ impl Mu<char, u32> {
             '(' => {
                 buff.pop();
                 let mu = Self::parse(buff)?;
-                buff.next()
-                    .and_then(|c| if c == ')' { Some(mu) } else { None })
+                buff.expect(')');
+                Some(mu)
             }
             '⟨' => {
                 buff.pop();
                 let act = Self::parse_act(buff)?;
-                buff.next()
-                    .and_then(|c| if c == '⟩' { Some(()) } else { None })?;
+                buff.expect('⟩')?;
                 Self::parse_atom(buff).map(|lhs| Mu::All(act, Box::new(lhs)))
             }
             '[' => {
                 buff.pop();
                 let act = Self::parse_act(buff)?;
-                buff.next()
-                    .and_then(|c| if c == ']' { Some(()) } else { None })?;
+                buff.expect(']')?;
                 Self::parse_atom(buff).map(|lhs| Mu::All(act, Box::new(lhs)))
             }
             '¬' => {
@@ -116,30 +69,24 @@ impl Mu<char, u32> {
             'μ' => {
                 buff.pop();
                 let x = Self::parse_var(buff)?;
-                buff.next()
-                    .and_then(|c| if c == '.' { Some(()) } else { None })?;
+                buff.expect('.')?;
                 let lhs = Self::parse(buff)?;
                 Some(Mu::Lfp(x.to_string(), Box::new(lhs)))
             }
             'ν' => {
                 buff.pop();
                 let x = Self::parse_var(buff)?;
-                buff.next().and_then(|c| {
-                    if c == '.' {
-                        let lhs = Self::parse(buff)?;
-                        Some(Mu::Gfp(x.to_string(), Box::new(lhs)))
-                    } else {
-                        None
-                    }
-                })
+                buff.expect('.')?;
+                let lhs = Self::parse(buff)?;
+                Some(Mu::Gfp(x.to_string(), Box::new(lhs)))
             }
             _ => None,
         }
     }
 
-    fn parse_disj(buff: &mut Buff) -> Option<Self> {
+    fn parse_disj(buff: &mut Buff<char>) -> Option<Self> {
         let mut lhs = Self::parse_conj(buff)?;
-        while let Some('∨') = buff.get() {
+        while let Some('∨') = buff.top() {
             buff.pop();
             let rhs = Self::parse_conj(buff)?;
             lhs = Mu::Or(Box::new(lhs), Box::new(rhs));
@@ -147,9 +94,9 @@ impl Mu<char, u32> {
         Some(lhs)
     }
 
-    fn parse_conj(buff: &mut Buff) -> Option<Self> {
+    fn parse_conj(buff: &mut Buff<char>) -> Option<Self> {
         let mut lhs = Self::parse_atom(buff)?;
-        while let Some('∧') = buff.get() {
+        while let Some('∧') = buff.top() {
             buff.pop();
             let rhs = Self::parse_atom(buff)?;
             lhs = Mu::And(Box::new(lhs), Box::new(rhs));
@@ -157,17 +104,21 @@ impl Mu<char, u32> {
         Some(lhs)
     }
 
-    fn parse(buff: &mut Buff) -> Option<Self> {
+    fn parse(buff: &mut Buff<char>) -> Option<Self> {
         let res = Self::parse_disj(buff);
-        if let Some(_) = buff.next() {
+        if buff.next().is_some() {
             None
         } else {
             res
         }
     }
+}
 
-    pub fn from_str(str: &str) -> Option<Self> {
-        Self::parse(&mut Buff::new(str.to_string()))
+impl FromStr for Mu<char, u32> {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut buff = Buff::new(s.chars().filter(|c| *c != ' ').collect());
+        Self::parse(&mut buff).ok_or_else(|| "Error while parsing Mu formula".to_string())
     }
 }
 
@@ -197,6 +148,6 @@ mod test {
     use super::*;
     #[test]
     fn test() {
-        println!("{}", Mu::from_str("μx.[a]x ∨ μy.⟨b⟩y").unwrap())
+        println!("{}", Mu::from_str("μx.[a]x ∨ x").unwrap())
     }
 }

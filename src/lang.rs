@@ -13,6 +13,39 @@ pub enum Instr {
     Loop(u32, String),
 }
 
+enum Sexpr {
+    Sym(String),
+    Num(u32),
+    List(Vec<Sexpr>),
+}
+
+impl Sexpr {
+    pub fn parse_list(buff: &mut Buff<char>) -> Option<Vec<Self>> {
+        let mut sexps = vec![Self::parse(buff)?];
+        buff.save();
+        while let Some(l) = Self::parse(buff) {
+            sexps.push(l);
+            buff.update_save();
+        }
+        buff.restore();
+        Some(sexps)
+    }
+
+    pub fn parse(buff: &mut Buff<char>) -> Option<Self> {
+        buff.trim();
+        match buff.top()? {
+            '0'..='9' => buff.expect_u32().map(Sexpr::Num),
+            '(' => {
+                let list = Self::parse_list(buff)?;
+                buff.trim();
+                buff.expect(')')?;
+                Some(Sexpr::List(list))
+            }
+            _ => buff.expect_symb().map(Sexpr::Sym),
+        }
+    }
+}
+
 impl Instr {
     fn parse_symb_list(buff: &mut Buff<char>) -> Option<Vec<String>> {
         let mut symbols = vec![buff.expect_symb()?];
@@ -128,7 +161,7 @@ impl Instr {
         Self::parse_loop(buff)
     }
 
-    fn check(&self, props: &Vec<String>, actions: &Vec<String>) -> Result<(), String> {
+    fn check(&self, props: &[String], actions: &[String]) -> Result<(), String> {
         match self {
             Instr::Label(_, label) => {
                 for p in label {
@@ -212,12 +245,12 @@ impl Prog {
                 }
                 Instr::Trans(state1, action, state2) => {
                     if !ts.states.contains(state1) {
-                        ts.states.insert(state1.clone());
+                        ts.states.insert(*state1);
                     }
                     if !ts.states.contains(state2) {
-                        ts.states.insert(state2.clone());
+                        ts.states.insert(*state2);
                     }
-                    if let Some(post) = ts.transitions.get_mut(&state1) {
+                    if let Some(post) = ts.transitions.get_mut(state1) {
                         post.insert(action.clone(), *state2);
                     } else {
                         ts.transitions.insert(
@@ -228,9 +261,9 @@ impl Prog {
                 }
                 Instr::Loop(state, action) => {
                     if !ts.states.contains(state) {
-                        ts.states.insert(state.clone());
+                        ts.states.insert(*state);
                     }
-                    if let Some(post) = ts.transitions.get_mut(&state) {
+                    if let Some(post) = ts.transitions.get_mut(state) {
                         post.insert(action.clone(), *state);
                     } else {
                         ts.transitions.insert(

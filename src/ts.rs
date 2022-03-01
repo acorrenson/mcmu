@@ -85,12 +85,12 @@ where
             }
             Mu::And(a, b) => {
                 let sat_a = self.sat(a, env.clone());
-                let sat_b = self.sat(b, env.clone());
+                let sat_b = self.sat(b, env);
                 sat_a.intersection(&sat_b).cloned().collect()
             }
             Mu::Or(a, b) => {
                 let sat_a = self.sat(a, env.clone());
-                let sat_b = self.sat(b, env.clone());
+                let sat_b = self.sat(b, env);
                 sat_a.union(&sat_b).cloned().collect()
             }
             Mu::Gfp(x, a) => {
@@ -107,11 +107,11 @@ where
                 sat
             }
             Mu::All(act, a) => {
-                let sat_a = self.sat(a, env.clone());
+                let sat_a = self.sat(a, env);
                 let mut sat_all = HashSet::<u32>::new();
                 for s1 in &self.states {
-                    if self.succ(&s1, &act).iter().all(|s2| sat_a.contains(s2)) {
-                        sat_all.insert(s1.clone());
+                    if self.succ(s1, act).iter().all(|s2| sat_a.contains(s2)) {
+                        sat_all.insert(*s1);
                     }
                 }
                 sat_all
@@ -130,11 +130,11 @@ where
                 sat
             }
             Mu::Ex(act, a) => {
-                let sat_a = self.sat(a, env.clone());
+                let sat_a = self.sat(a, env);
                 let mut sat_ex = HashSet::new();
                 for s1 in &self.states {
-                    if self.succ(&s1, &act).iter().any(|s2| sat_a.contains(s2)) {
-                        sat_ex.insert(s1.clone());
+                    if self.succ(s1, act).iter().any(|s2| sat_a.contains(s2)) {
+                        sat_ex.insert(*s1);
                     }
                 }
                 sat_ex
