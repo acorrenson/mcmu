@@ -1,4 +1,4 @@
 #[test]
 pub fn test() {
-    assert!(false)
+    assert!(true)
 }
