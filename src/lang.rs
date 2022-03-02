@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     str::FromStr,
 };
 
@@ -108,14 +109,19 @@ impl ProgEnv {
                 }
             }
             Instr::SetSpec(s) => Ok(self.spec.push(s)),
-            Instr::Label(s, l) => {
-                if self.labels.get(&s).is_some() {
+            Instr::Label(s, label) => {
+                if let Some(prop) = label.iter().find(|p| !self.props.contains(*p)) {
+                    Err(format!(
+                        "Ill-formed program: use of undeclared proposition {}",
+                        prop
+                    ))
+                } else if self.labels.get(&s).is_some() {
                     Err(format!(
                         "Ill-formed program: the label for states {} is declared twice",
                         s
                     ))
                 } else {
-                    self.labels.insert(s, HashSet::from_iter(l.into_iter()));
+                    self.labels.insert(s, HashSet::from_iter(label.into_iter()));
                     Ok(())
                 }
             }
@@ -140,7 +146,12 @@ impl ProgEnv {
             }
             Instr::Loop(s, a) => {
                 self.states.insert(s);
-                if let Some(h) = self.transitions.get_mut(&s) {
+                if !self.actions.contains(&a) {
+                    Err(format!(
+                        "Ill-formed program: use of undeclared action {}",
+                        a
+                    ))
+                } else if let Some(h) = self.transitions.get_mut(&s) {
                     if h.get(&a).is_some() {
                         Err(format!(
                             "Ill-formed program: the {}-transition for states {} is declared twice",
@@ -159,6 +170,7 @@ impl ProgEnv {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Prog {
     instructions: Vec<Instr>,
 }
@@ -192,7 +204,46 @@ impl FromStr for Prog {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut buff = Buff::new(s.chars().collect());
         buff.expect_list(Instr::parse)
-            .ok_or_else(|| "Prog: parse error".to_string())
             .map(|instructions| Prog { instructions })
+            .and_then(|prog| {
+                buff.expect_end()?;
+                Some(prog)
+            })
+            .ok_or_else(|| "Prog: parse error".to_string())
+    }
+}
+
+#[cfg(test)]
+mod test_prog {
+    use crate::{lang::Instr::*, lang::Prog};
+
+    #[test]
+    fn test_1() {
+        let prog = "
+(props P)
+(init 1)
+(actions act)
+(trans 1 act 2)";
+        assert_eq!(
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![
+                    SetProps(vec!["P".to_string()]),
+                    SetInit(vec![1]),
+                    SetActions(vec!["act".to_string()]),
+                    Trans(1, "act".to_string(), 2)
+                ],
+            })
+        )
+    }
+
+    #[test]
+    fn test_2() {
+        let prog = "
+(props P)
+(init 1)
+(actions act)
+(random 1 act 2)";
+        assert!(prog.parse::<Prog>().is_err())
     }
 }
