@@ -106,6 +106,17 @@ where
         Some(list)
     }
 
+    pub fn convert_list<U>(&mut self, conv: fn(T) -> Option<U>) -> Option<Vec<U>> {
+        let mut list = vec![conv(self.next()?)?];
+        self.save();
+        while let Some(l) = self.expect_convert(conv) {
+            list.push(l);
+            self.update_save();
+        }
+        self.restore();
+        Some(list)
+    }
+
     pub fn expect_list<U>(&mut self, parse: fn(&mut Buff<T>) -> Option<U>) -> Option<Vec<U>> {
         let mut list = vec![parse(self)?];
         self.save();
@@ -115,6 +126,18 @@ where
         }
         self.restore();
         Some(list)
+    }
+
+    pub fn expect_convert<U>(&mut self, conv: fn(T) -> Option<U>) -> Option<U> {
+        conv(self.next()?)
+    }
+
+    pub fn expect_end(&self) -> Option<()> {
+        if self.top().is_some() {
+            None
+        } else {
+            Some(())
+        }
     }
 
     pub fn expect_one_of(&mut self, alt: Vec<T>) -> Option<()> {

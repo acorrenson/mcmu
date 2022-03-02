@@ -30,6 +30,14 @@ impl Sexpr {
         }
     }
 
+    pub fn get_symb_opt(self) -> Option<String> {
+        if let Sexpr::Sym(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     pub fn get_num(self) -> u32 {
         if let Sexpr::Num(s) = self {
             s
@@ -38,11 +46,39 @@ impl Sexpr {
         }
     }
 
+    pub fn get_num_opt(self) -> Option<u32> {
+        if let Sexpr::Num(n) = self {
+            Some(n)
+        } else {
+            None
+        }
+    }
+
     pub fn get_list(self) -> Vec<Self> {
         if let Sexpr::List(l) = self {
             l
         } else {
             panic!()
+        }
+    }
+
+    pub fn get_list_opt(self) -> Option<Vec<Sexpr>> {
+        if let Sexpr::List(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_singleton_opt(self) -> Option<Sexpr> {
+        if let Sexpr::List(s) = self {
+            if s.len() == 1 {
+                Some(s[0].clone())
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
@@ -176,5 +212,10 @@ mod test {
                 ])
             ])
         );
+    }
+
+    #[test]
+    fn test_10() {
+        assert_eq!(List(vec![Num(1)]).get_singleton_opt(), Some(Num(1)))
     }
 }
