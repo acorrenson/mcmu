@@ -226,6 +226,24 @@
 <span id="225">225</span>
 <span id="226">226</span>
 <span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident">std::fmt::Display</span>;
 
 <span class="doccomment">/// Buffer data structure for parsing</span>
@@ -250,19 +268,19 @@
         }
     }
 
+    <span class="doccomment">/// Push the current position to the stack</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">save</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) {
         <span class="self">self</span>.<span class="ident">stack</span>.<span class="ident">push</span>(<span class="self">self</span>.<span class="ident">pos</span>);
     }
 
+    <span class="doccomment">/// Pop the last position pushed to the stack</span>
+    <span class="doccomment">/// and set the current position to it</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">restore</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) {
         <span class="self">self</span>.<span class="ident">pos</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">stack</span>.<span class="ident">pop</span>().<span class="ident">unwrap</span>();
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">restore_save</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) {
-        <span class="self">self</span>.<span class="ident">restore</span>();
-        <span class="self">self</span>.<span class="ident">save</span>();
-    }
-
+    <span class="doccomment">/// Update the top of the stack</span>
+    <span class="doccomment">/// to be the current position</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">update_save</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) {
         <span class="self">self</span>.<span class="ident">stack</span>.<span class="ident">pop</span>();
         <span class="self">self</span>.<span class="ident">stack</span>.<span class="ident">push</span>(<span class="self">self</span>.<span class="ident">pos</span>);
@@ -274,6 +292,8 @@
         <span class="self">self</span>.<span class="ident">data</span>.<span class="ident">get</span>(<span class="self">self</span>.<span class="ident">pos</span>).<span class="ident">cloned</span>()
     }
 
+    <span class="doccomment">/// Check if there are still elements to read</span>
+    <span class="doccomment">/// in the buffer</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">is_empty</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="ident">bool</span> {
         <span class="self">self</span>.<span class="ident">pos</span> <span class="op">&gt;</span><span class="op">=</span> <span class="self">self</span>.<span class="ident">data</span>.<span class="ident">len</span>()
     }
@@ -311,6 +331,8 @@
         }
     }
 
+    <span class="doccomment">/// Expect the current element of the buffer to</span>
+    <span class="doccomment">/// satisfies a condition and returns it.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expect_cond</span><span class="op">&lt;</span><span class="ident">P</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">cond</span>: <span class="ident">P</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>
     <span class="kw">where</span>
         <span class="ident">P</span>: <span class="ident">FnOnce</span>(<span class="kw-2">&amp;</span><span class="ident">T</span>) -&gt; <span class="ident">bool</span>,
@@ -323,6 +345,18 @@
         }
     }
 
+    <span class="doccomment">/// Expect the current element of the buffer to</span>
+    <span class="doccomment">/// be convertible.</span>
+    <span class="doccomment">/// The conversion function is expected to return `None` if</span>
+    <span class="doccomment">/// the element is not convertible</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expect_convert</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">conv</span>: <span class="kw">fn</span>(<span class="ident">T</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span> {
+        <span class="ident">conv</span>(<span class="self">self</span>.<span class="ident">next</span>()<span class="question-mark">?</span>)
+    }
+
+    <span class="doccomment">/// Expect a non-empty sequence of</span>
+    <span class="doccomment">/// elements satisfying a given condition.</span>
+    <span class="doccomment">/// Elements are converted according to a given conversion</span>
+    <span class="doccomment">/// function.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">convert_while</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">pre</span>: <span class="kw">fn</span>(<span class="kw-2">&amp;</span><span class="ident">T</span>) -&gt; <span class="ident">bool</span>, <span class="ident">conv</span>: <span class="kw">fn</span>(<span class="ident">T</span>) -&gt; <span class="ident">U</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">list</span> <span class="op">=</span> <span class="macro">vec!</span>[<span class="ident">conv</span>(<span class="self">self</span>.<span class="ident">expect_cond</span>(<span class="ident">pre</span>)<span class="question-mark">?</span>)];
         <span class="self">self</span>.<span class="ident">save</span>();
@@ -334,6 +368,10 @@
         <span class="prelude-val">Some</span>(<span class="ident">list</span>)
     }
 
+    <span class="doccomment">/// Expect a non-empty sequence of</span>
+    <span class="doccomment">/// elements satisfying a given condition.</span>
+    <span class="doccomment">/// The condition is given as a conversion function</span>
+    <span class="doccomment">/// returning `None` if the element violates the condition</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">convert_list</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">conv</span>: <span class="kw">fn</span>(<span class="ident">T</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">list</span> <span class="op">=</span> <span class="macro">vec!</span>[<span class="ident">conv</span>(<span class="self">self</span>.<span class="ident">next</span>()<span class="question-mark">?</span>)<span class="question-mark">?</span>];
         <span class="self">self</span>.<span class="ident">save</span>();
@@ -345,6 +383,8 @@
         <span class="prelude-val">Some</span>(<span class="ident">list</span>)
     }
 
+    <span class="doccomment">/// Parse a non-empty list of elements according</span>
+    <span class="doccomment">/// to a parsing function</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expect_list</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">parse</span>: <span class="kw">fn</span>(<span class="kw-2">&amp;mut</span> <span class="ident">Buff</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">list</span> <span class="op">=</span> <span class="macro">vec!</span>[<span class="ident">parse</span>(<span class="self">self</span>)<span class="question-mark">?</span>];
         <span class="self">self</span>.<span class="ident">save</span>();
@@ -354,10 +394,6 @@
         }
         <span class="self">self</span>.<span class="ident">restore</span>();
         <span class="prelude-val">Some</span>(<span class="ident">list</span>)
-    }
-
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expect_convert</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">conv</span>: <span class="kw">fn</span>(<span class="ident">T</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">U</span><span class="op">&gt;</span> {
-        <span class="ident">conv</span>(<span class="self">self</span>.<span class="ident">next</span>()<span class="question-mark">?</span>)
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">expect_end</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {

@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["lang",""],["mu",""],["ts",""]]});
+initSidebarItems({"mod":[["buff",""],["lang",""],["mu",""],["sexpr",""],["ts",""]]});

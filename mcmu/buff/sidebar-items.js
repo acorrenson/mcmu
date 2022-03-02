@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Buff","Buffer data structure for parsing"]]});
