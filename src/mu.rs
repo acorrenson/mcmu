@@ -193,7 +193,7 @@ impl Mu<String, String> {
             Sexpr::List(list) => {
                 let mut buff = Buff::new(list);
                 let op = buff.expect_cond(Sexpr::is_symb)?.get_symb();
-                if op == *"any" || op == *"any" {
+                if op == *"any" || op == *"all" {
                     Self::parse_quantifier(&mut buff, op == *"any")
                 } else if op == *"lfp" || op == "gfp" {
                     Self::parse_fixpoint(&mut buff, op == *"lfp")
@@ -351,6 +351,32 @@ mod test {
                 Box::new(Lfp("x".to_string(), Box::new(Var("x".to_string())))),
                 Box::new(Lit("x".to_string()))
             ),
+        )
+    }
+
+    #[test]
+    fn test_9() {
+        let sexpr = List(vec![
+            Sym("all".to_string()),
+            List(vec![Sym("a".to_string())]),
+            Sym("s1".to_string()),
+        ]);
+        assert_eq!(
+            Mu::from_sexpr(sexpr).unwrap(),
+            All("a".to_string(), Box::new(Lit("s1".to_string()))),
+        )
+    }
+
+    #[test]
+    fn test_10() {
+        let sexpr = List(vec![
+            Sym("any".to_string()),
+            List(vec![Sym("a".to_string())]),
+            Sym("s1".to_string()),
+        ]);
+        assert_eq!(
+            Mu::from_sexpr(sexpr).unwrap(),
+            Ex("a".to_string(), Box::new(Lit("s1".to_string()))),
         )
     }
 }
