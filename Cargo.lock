@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "mu_calc"
+name = "mcmu"
 version = "0.1.0"

@@ -1,6 +1,6 @@
 use std::{env::args, fs};
 
-use mu_calc::lang::Prog;
+use mcmu::lang::Prog;
 
 fn run(filename: &str) -> Result<bool, String> {
     let input = fs::read_to_string(filename).map_err(|err| format!("{}", err))?;

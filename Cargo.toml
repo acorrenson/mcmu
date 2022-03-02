@@ -1,7 +1,10 @@
 [package]
-name = "mu_calc"
+name = "mcmu"
+description = "A tinny model checker for CTL and μ-calculus"
 version = "0.1.0"
 edition = "2021"
+authors = ["Arthur Correnson"]
+repository = "https://github.com/jdrprod/mcmu/"
 license-file = "LICENSE"
 publish = ["kellnr"]
 
