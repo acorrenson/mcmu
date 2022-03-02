@@ -1,6 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
-use crate::{buff::Buff, mu::Mu, ts::Ts};
+use crate::{buff::Buff, mu::Mu, sexpr::Sexpr, ts::Ts};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Instr {
@@ -14,318 +17,358 @@ pub enum Instr {
 }
 
 impl Instr {
-    fn parse_symb_list(buff: &mut Buff<char>) -> Option<Vec<String>> {
-        let mut symbols = vec![buff.expect_symb()?];
-        buff.save();
-        while let Some(l) = buff.expect_symb() {
-            symbols.push(l);
-            buff.update_save();
+    fn expect_symb_list(buff: &mut Buff<Sexpr>) -> Option<Vec<String>> {
+        buff.convert_while(Sexpr::is_symb, Sexpr::get_symb)
+    }
+
+    fn expect_num_list(buff: &mut Buff<Sexpr>) -> Option<Vec<u32>> {
+        buff.convert_while(Sexpr::is_num, Sexpr::get_num)
+    }
+
+    fn from_sexpr(s: Sexpr) -> Option<Instr> {
+        if !s.is_list() {
+            return None;
         }
-        buff.restore();
-        Some(symbols)
-    }
-
-    fn parse_num_list(buff: &mut Buff<char>) -> Option<Vec<u32>> {
-        let mut nums = vec![buff.expect_u32()?];
-        buff.save();
-        while let Some(l) = buff.expect_u32() {
-            nums.push(l);
-            buff.update_save();
+        let list = s.get_list();
+        let mut buff = Buff::new(list);
+        let cmd = buff.expect_cond(Sexpr::is_symb)?.get_symb();
+        if cmd == *"label" {
+            let n = buff.expect_cond(Sexpr::is_num)?.get_num();
+            let label = Self::expect_symb_list(&mut buff)?;
+            Some(Instr::Label(n, label))
+        } else if cmd == *"props" {
+            let label = Self::expect_symb_list(&mut buff)?;
+            Some(Instr::SetProps(label))
+        } else if cmd == *"init" {
+            let init = Self::expect_num_list(&mut buff)?;
+            Some(Instr::SetInit(init))
+        } else if cmd == *"actions" {
+            let actions = Self::expect_symb_list(&mut buff)?;
+            Some(Instr::SetActions(actions))
+        } else if cmd == *"trans" {
+            let state1 = buff.expect_cond(Sexpr::is_num)?.get_num();
+            let action = buff.expect_cond(Sexpr::is_symb)?.get_symb();
+            let state2 = buff.expect_cond(Sexpr::is_num)?.get_num();
+            Some(Instr::Trans(state1, action, state2))
+        } else if cmd == *"loop" {
+            let state1 = buff.expect_cond(Sexpr::is_num)?.get_num();
+            let action = buff.expect_cond(Sexpr::is_symb)?.get_symb();
+            Some(Instr::Loop(state1, action))
+        } else if cmd == *"spec" {
+            let spec = buff.next()?;
+            buff.expect_end()?;
+            Some(Instr::SetSpec(Mu::from_sexpr(spec)?))
+        } else {
+            None
         }
-        buff.restore();
-        Some(nums)
-    }
-
-    fn parse_label(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("label".to_string())?;
-        let state = buff.expect_u32()?;
-        buff.expect_blank()?;
-        let label = Self::parse_symb_list(buff)?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::Label(state, label))
-    }
-
-    fn parse_trans(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("trans".to_string())?;
-        let state1 = buff.expect_u32()?;
-        buff.expect_blank()?;
-        let action = buff.expect_symb()?;
-        let state2 = buff.expect_u32()?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::Trans(state1, action, state2))
-    }
-
-    fn parse_actions_decl(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("actions".to_string())?;
-        let actions = Self::parse_symb_list(buff)?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::SetActions(actions))
-    }
-
-    fn parse_props_decl(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("props".to_string())?;
-        let props = Self::parse_symb_list(buff)?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::SetProps(props))
-    }
-
-    fn parse_init_decl(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("init".to_string())?;
-        let initials = Self::parse_num_list(buff)?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::SetInit(initials))
-    }
-
-    fn parse_loop(buff: &mut Buff<char>) -> Option<Self> {
-        buff.trim();
-        buff.expect('(')?;
-        buff.expect_token("loop".to_string())?;
-        let state = buff.expect_u32()?;
-        buff.expect_blank()?;
-        let action = buff.expect_symb()?;
-        buff.trim();
-        buff.expect(')')?;
-        Some(Instr::Loop(state, action))
     }
 
     fn parse(buff: &mut Buff<char>) -> Option<Self> {
-        buff.save();
-        if let i @ Some(_) = Self::parse_trans(buff) {
-            return i;
-        }
-        buff.restore_save();
-        if let i @ Some(_) = Self::parse_label(buff) {
-            return i;
-        }
-        buff.restore_save();
-        if let i @ Some(_) = Self::parse_props_decl(buff) {
-            return i;
-        }
-        buff.restore_save();
-        if let i @ Some(_) = Self::parse_actions_decl(buff) {
-            return i;
-        }
-        buff.restore_save();
-        if let i @ Some(_) = Self::parse_init_decl(buff) {
-            return i;
-        }
-        buff.restore_save();
-        Self::parse_loop(buff)
+        Sexpr::parse(buff).and_then(Instr::from_sexpr)
     }
+}
 
-    fn check(&self, props: &Vec<String>, actions: &Vec<String>) -> Result<(), String> {
-        match self {
-            Instr::Label(_, label) => {
-                for p in label {
-                    if !props.contains(p) {
-                        return Err(format!("undeclared proposition {}", p));
+pub struct ProgEnv {
+    props: HashSet<String>,
+    actions: HashSet<String>,
+    states: HashSet<u32>,
+    spec: Vec<Mu<String, String>>,
+    initial: HashSet<u32>,
+    labels: HashMap<u32, HashSet<String>>,
+    transitions: HashMap<u32, HashMap<String, u32>>,
+}
+
+impl ProgEnv {
+    pub fn exec(&mut self, instr: Instr) -> Result<(), String> {
+        match instr {
+            Instr::SetProps(props) => {
+                if self.props.is_empty() {
+                    for prop in props {
+                        self.props.insert(prop);
                     }
-                }
-                Ok(())
-            }
-            Instr::Trans(_, act, _) => {
-                if actions.contains(act) {
                     Ok(())
                 } else {
-                    Err(format!("undeclared action {}", act))
+                    Err("Ill-formed program: the proposition set is declared twice".to_string())
                 }
             }
-            Instr::Loop(_, act) => {
-                if actions.contains(act) {
+            Instr::SetActions(actions) => {
+                if self.actions.is_empty() {
+                    for action in actions {
+                        self.actions.insert(action);
+                    }
                     Ok(())
                 } else {
-                    Err(format!("undeclared action {}", act))
+                    Err("Ill-formed program: the action set is declared twice".to_string())
                 }
             }
-            Instr::SetProps(_) => Ok(()),
-            Instr::SetActions(_) => Ok(()),
-            Instr::SetInit(_) => Ok(()),
-            Instr::SetSpec(_) => Ok(()),
+            Instr::SetInit(initial) => {
+                if self.initial.is_empty() {
+                    for init in initial {
+                        self.initial.insert(init);
+                    }
+                    Ok(())
+                } else {
+                    Err("Ill-formed program: the initial states are declared twice".to_string())
+                }
+            }
+            Instr::SetSpec(s) => Ok(self.spec.push(s)),
+            Instr::Label(s, label) => {
+                if let Some(prop) = label.iter().find(|p| !self.props.contains(*p)) {
+                    Err(format!(
+                        "Ill-formed program: use of undeclared proposition {}",
+                        prop
+                    ))
+                } else if self.labels.get(&s).is_some() {
+                    Err(format!(
+                        "Ill-formed program: the label for states {} is declared twice",
+                        s
+                    ))
+                } else {
+                    self.labels.insert(s, HashSet::from_iter(label.into_iter()));
+                    Ok(())
+                }
+            }
+
+            Instr::Trans(s1, a, s2) => {
+                self.states.insert(s1);
+                self.states.insert(s2);
+                if !self.actions.contains(&a) {
+                    Err(format!(
+                        "Ill-formed program: use of undeclared action {}",
+                        a
+                    ))
+                } else if let Some(h) = self.transitions.get_mut(&s1) {
+                    if h.get(&a).is_some() {
+                        Err(format!(
+                            "Ill-formed program: the {}-transition for states {} is declared twice",
+                            a, s1
+                        ))
+                    } else {
+                        h.insert(a, s2);
+                        Ok(())
+                    }
+                } else {
+                    self.transitions.insert(s1, HashMap::from_iter([(a, s2)]));
+                    Ok(())
+                }
+            }
+            Instr::Loop(s, a) => {
+                self.states.insert(s);
+                if !self.actions.contains(&a) {
+                    Err(format!(
+                        "Ill-formed program: use of undeclared action {}",
+                        a
+                    ))
+                } else if let Some(h) = self.transitions.get_mut(&s) {
+                    if h.get(&a).is_some() {
+                        Err(format!(
+                            "Ill-formed program: the {}-transition for states {} is declared twice",
+                            a, s
+                        ))
+                    } else {
+                        h.insert(a, s);
+                        Ok(())
+                    }
+                } else {
+                    self.transitions.insert(s, HashMap::from_iter([(a, s)]));
+                    Ok(())
+                }
+            }
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prog {
-    spec: Vec<Mu<String, String>>,
-    props: Vec<String>,
-    actions: Vec<String>,
-    init: Vec<u32>,
     instructions: Vec<Instr>,
 }
 
 impl Prog {
-    pub fn check(&self) -> Result<(), String> {
-        for i in &self.instructions {
-            i.check(&self.props, &self.actions)?;
+    pub fn compile(self) -> Result<Ts<String, String>, String> {
+        let mut env = ProgEnv {
+            props: HashSet::new(),
+            actions: HashSet::new(),
+            states: HashSet::new(),
+            spec: vec![],
+            initial: HashSet::new(),
+            labels: HashMap::new(),
+            transitions: HashMap::new(),
+        };
+        for instr in self.instructions {
+            env.exec(instr)?;
         }
-        Ok(())
-    }
-
-    pub fn parse(string: String) -> Option<Self> {
-        let buff = &mut Buff::new(string.chars().collect());
-        let mut instructions = vec![];
-        let mut actions = vec![];
-        let mut init = vec![];
-        let mut spec = vec![];
-        let mut props = vec![];
-        while let Some(i) = Instr::parse(buff) {
-            match i {
-                Instr::SetProps(new_props) => props.append(&mut new_props.clone()),
-                Instr::SetActions(new_actions) => actions.append(&mut new_actions.clone()),
-                Instr::SetInit(new_init) => init.append(&mut new_init.clone()),
-                Instr::SetSpec(new_spec) => spec.push(new_spec),
-                _ => instructions.push(i),
-            }
-        }
-        Some(Prog {
-            spec,
-            init,
-            props,
-            actions,
-            instructions,
+        Ok(Ts {
+            states: env.states,
+            initial: env.initial,
+            labels: env.labels,
+            transitions: env.transitions,
+            spec: env.spec,
         })
     }
+}
 
-    pub fn compile(self) -> Ts<String, String> {
-        let mut ts = Ts::<String, String>::new(vec![], self.init, vec![], vec![]);
-        for instr in &self.instructions {
-            match instr {
-                Instr::Label(state, label) => {
-                    ts.labels
-                        .insert(*state, HashSet::from_iter(label.iter().cloned()));
-                }
-                Instr::Trans(state1, action, state2) => {
-                    if !ts.states.contains(state1) {
-                        ts.states.insert(state1.clone());
-                    }
-                    if !ts.states.contains(state2) {
-                        ts.states.insert(state2.clone());
-                    }
-                    if let Some(post) = ts.transitions.get_mut(&state1) {
-                        post.insert(action.clone(), *state2);
-                    } else {
-                        ts.transitions.insert(
-                            *state1,
-                            HashMap::from_iter(vec![(action.clone(), *state2)].into_iter()),
-                        );
-                    }
-                }
-                Instr::Loop(state, action) => {
-                    if !ts.states.contains(state) {
-                        ts.states.insert(state.clone());
-                    }
-                    if let Some(post) = ts.transitions.get_mut(&state) {
-                        post.insert(action.clone(), *state);
-                    } else {
-                        ts.transitions.insert(
-                            *state,
-                            HashMap::from_iter(vec![(action.clone(), *state)].into_iter()),
-                        );
-                    }
-                }
-                _ => (),
-            }
-        }
-        ts
+impl FromStr for Prog {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut buff = Buff::new(s.chars().collect());
+        buff.expect_list(Instr::parse)
+            .map(|instructions| Prog { instructions })
+            .and_then(|prog| {
+                buff.expect_end()?;
+                Some(prog)
+            })
+            .ok_or_else(|| "Prog: parse error".to_string())
     }
 }
 
 #[cfg(test)]
-mod test {
-    use super::Instr;
-    use crate::{buff::Buff, lang::Prog, ts::Ts};
+mod test_prog {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::{lang::Instr::*, lang::Prog, ts::Ts};
 
     #[test]
     fn test_1() {
-        let mut buff = Buff::new("(label 1 P Q)".chars().collect());
+        let prog = "
+(props P)";
         assert_eq!(
-            Instr::parse(&mut buff).unwrap(),
-            Instr::Label(1, vec!["P".to_string(), "Q".to_string()])
-        );
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![SetProps(vec!["P".to_string()])]
+            })
+        )
     }
 
     #[test]
     fn test_2() {
-        let mut buff = Buff::new("(trans 1 act1 2)".chars().collect());
+        let prog = "
+(init 1)";
         assert_eq!(
-            Instr::parse(&mut buff).unwrap(),
-            Instr::Trans(1, "act1".to_string(), 2)
-        );
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![SetInit(vec![1])]
+            })
+        )
     }
 
     #[test]
     fn test_3() {
-        let mut buff = Buff::new("(loop 1 act1)".chars().collect());
+        let prog = "
+(label 1 P)";
         assert_eq!(
-            Instr::parse(&mut buff).unwrap(),
-            Instr::Loop(1, "act1".to_string())
-        );
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![Label(1, vec!["P".to_string()])]
+            })
+        )
     }
 
     #[test]
     fn test_4() {
-        let prog = "
-          (props P Q R)
-          (actions act1)
-          (init 1)
-          (label 1 P)
-          (label 2 Q)
-          (trans 1 act1 2)
-          (loop 2 act2)
-        ";
+        let prog = "(trans 1 act 2)";
         assert_eq!(
-            Prog::parse(prog.to_string()).unwrap(),
-            Prog {
-                spec: vec![],
-                props: vec!["P".to_string(), "Q".to_string(), "R".to_string()],
-                actions: vec!["act1".to_string()],
-                instructions: vec![
-                    Instr::Label(1, vec!["P".to_string()]),
-                    Instr::Label(2, vec!["Q".to_string()]),
-                    Instr::Trans(1, "act1".to_string(), 2),
-                    Instr::Loop(2, "act2".to_string()),
-                ],
-                init: vec![1]
-            }
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![Trans(1, "act".to_string(), 2)]
+            })
         )
     }
 
     #[test]
     fn test_5() {
         let prog = "
-        (props P Q R)
-        (actions act1)
-        (label 1 P)
-        (label 2 Q)
-        (trans 1 act1 2)
-        (loop 2 act2)";
+(loop 1 act)";
         assert_eq!(
-            Prog::parse(prog.to_string()).unwrap().compile(),
-            Ts::new(
-                vec![1, 2],
-                vec![],
-                vec![(1, vec!["P".to_string()]), (2, vec!["Q".to_string()])],
-                vec![
-                    (1, vec![("act1".to_string(), 2)]),
-                    (2, vec![("act2".to_string(), 2)])
-                ]
-            )
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![Loop(1, "act".to_string())]
+            })
+        )
+    }
+
+    #[test]
+    fn test_6() {
+        let prog = "(loop 1 act)";
+        assert_eq!(
+            prog.parse::<Prog>(),
+            Ok(Prog {
+                instructions: vec![Loop(1, "act".to_string())]
+            })
+        )
+    }
+
+    #[test]
+    fn test_7() {
+        let prog = "
+(props P)
+(init 1)
+(actions act)
+(random 1 act 2)";
+        assert!(prog.parse::<Prog>().is_err())
+    }
+
+    #[test]
+    fn test_8() {
+        let prog = "
+(props P)
+(init 1)
+(actions act)
+(random 1 act 2)";
+        assert!(prog.parse::<Prog>().is_err())
+    }
+
+    #[test]
+    fn test_9() {
+        let prog = "(spec (lfp (a) (and s1 s2)))";
+        assert!(prog.parse::<Prog>().is_ok())
+    }
+
+    #[test]
+    fn test_10() {
+        let prog = "(props P)p";
+        assert!(prog.parse::<Prog>().is_err())
+    }
+
+    #[test]
+    fn test_11() {
+        let prog = "()";
+        assert!(prog.parse::<Prog>().is_err())
+    }
+
+    #[test]
+    fn test_12() {
+        let prog = "(trans 1 act 2)";
+        assert!(prog.parse::<Prog>().unwrap().compile().is_err())
+    }
+
+    #[test]
+    fn test_13() {
+        let prog = "(actions act)(trans 1 act 2)";
+        assert_eq!(
+            prog.parse::<Prog>().unwrap().compile(),
+            Ok(Ts {
+                states: HashSet::from([1, 2]),
+                initial: HashSet::from([]),
+                labels: HashMap::from([]),
+                transitions: HashMap::from([(1, HashMap::from([("act".to_string(), 2)]))]),
+                spec: vec![]
+            })
+        )
+    }
+
+    #[test]
+    fn test_14() {
+        let prog = "(actions act)(init 1)(trans 1 act 2)";
+        assert_eq!(
+            prog.parse::<Prog>().unwrap().compile(),
+            Ok(Ts {
+                states: HashSet::from([1, 2]),
+                initial: HashSet::from([1]),
+                labels: HashMap::from([]),
+                transitions: HashMap::from([(1, HashMap::from([("act".to_string(), 2)]))]),
+                spec: vec![]
+            })
         )
     }
 }

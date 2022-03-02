@@ -9,41 +9,31 @@ use crate::mu::Mu;
 #[derive(PartialEq, Eq, Debug)]
 pub struct Ts<A, P>
 where
-    A: Display,
-    A: Eq,
-    A: Clone,
-    A: Hash,
-    P: Eq,
-    P: Display,
-    P: Clone,
-    P: Hash,
+    A: Display + Eq + Clone + Hash,
+    P: Eq + Display + Clone + Hash,
 {
     pub(crate) states: HashSet<u32>,
-    pub(crate) initials: HashSet<u32>,
+    pub(crate) initial: HashSet<u32>,
     pub(crate) labels: HashMap<u32, HashSet<P>>,
     pub(crate) transitions: HashMap<u32, HashMap<A, u32>>,
+    pub(crate) spec: Vec<Mu<A, P>>,
 }
 
 impl<A, P> Ts<A, P>
 where
-    A: Display,
-    A: Eq,
-    A: Clone,
-    A: Hash,
-    P: Eq,
-    P: Display,
-    P: Clone,
-    P: Hash,
+    A: Display + Eq + Clone + Hash,
+    P: Eq + Display + Clone + Hash,
 {
     pub fn new(
         states: Vec<u32>,
         initials: Vec<u32>,
         labels: Vec<(u32, Vec<P>)>,
         transitions: Vec<(u32, Vec<(A, u32)>)>,
+        spec: Vec<Mu<A, P>>,
     ) -> Self {
         Ts {
             states: states.into_iter().collect(),
-            initials: initials.into_iter().collect(),
+            initial: initials.into_iter().collect(),
             labels: labels
                 .into_iter()
                 .map(|(s, labels)| (s, HashSet::from_iter(labels.into_iter())))
@@ -52,6 +42,7 @@ where
                 .into_iter()
                 .map(|(s, post)| (s, HashMap::from_iter(post.into_iter())))
                 .collect(),
+            spec,
         }
     }
 
@@ -63,9 +54,11 @@ where
         self.transitions.get(x).and_then(|succ| succ.get(act))
     }
 
-    pub fn check(&self, spec: &Mu<A, P>) -> bool {
-        let sat = self.sat(spec, HashMap::new());
-        self.initials.iter().all(|s| sat.contains(s))
+    pub fn check(&self) -> bool {
+        self.spec.iter().all(|form| {
+            let sat = self.sat(form, HashMap::new());
+            self.initial.iter().all(|s| sat.contains(s))
+        })
     }
 
     pub fn sat(&self, spec: &Mu<A, P>, env: HashMap<String, HashSet<u32>>) -> HashSet<u32> {
@@ -85,12 +78,12 @@ where
             }
             Mu::And(a, b) => {
                 let sat_a = self.sat(a, env.clone());
-                let sat_b = self.sat(b, env.clone());
+                let sat_b = self.sat(b, env);
                 sat_a.intersection(&sat_b).cloned().collect()
             }
             Mu::Or(a, b) => {
                 let sat_a = self.sat(a, env.clone());
-                let sat_b = self.sat(b, env.clone());
+                let sat_b = self.sat(b, env);
                 sat_a.union(&sat_b).cloned().collect()
             }
             Mu::Gfp(x, a) => {
@@ -107,11 +100,11 @@ where
                 sat
             }
             Mu::All(act, a) => {
-                let sat_a = self.sat(a, env.clone());
+                let sat_a = self.sat(a, env);
                 let mut sat_all = HashSet::<u32>::new();
                 for s1 in &self.states {
-                    if self.succ(&s1, &act).iter().all(|s2| sat_a.contains(s2)) {
-                        sat_all.insert(s1.clone());
+                    if self.succ(s1, act).iter().all(|s2| sat_a.contains(s2)) {
+                        sat_all.insert(*s1);
                     }
                 }
                 sat_all
@@ -130,11 +123,11 @@ where
                 sat
             }
             Mu::Ex(act, a) => {
-                let sat_a = self.sat(a, env.clone());
+                let sat_a = self.sat(a, env);
                 let mut sat_ex = HashSet::new();
                 for s1 in &self.states {
-                    if self.succ(&s1, &act).iter().any(|s2| sat_a.contains(s2)) {
-                        sat_ex.insert(s1.clone());
+                    if self.succ(s1, act).iter().any(|s2| sat_a.contains(s2)) {
+                        sat_ex.insert(*s1);
                     }
                 }
                 sat_ex
@@ -160,7 +153,7 @@ where
         writeln!(f, "digraph {{")?;
         writeln!(f, "  node [shape=circle]")?;
         for x in self.states.iter() {
-            if self.initials.contains(x) {
+            if self.initial.contains(x) {
                 writeln!(
                     f,
                     "  {} [shape=doublecircle, label=\"{{{}}}\"]",
@@ -179,5 +172,125 @@ where
             }
         }
         writeln!(f, "}}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn test_1() {
+        let ts = Ts::new(
+            vec![1, 2],
+            vec![1],
+            vec![(2, vec!['A'])],
+            vec![(1, vec![('a', 2)])],
+            vec![Mu::All('b', Box::new(Mu::Lit('A')))],
+        );
+        assert!(ts.check())
+    }
+
+    #[test]
+    fn test_2() {
+        let ts = Ts::new(
+            vec![1, 2],
+            vec![1],
+            vec![(2, vec!['A'])],
+            vec![(1, vec![('a', 2)])],
+            vec![Mu::All('a', Box::new(Mu::Lit('A')))],
+        );
+        assert!(ts.check())
+    }
+
+    #[test]
+    fn test_3() {
+        let ts = Ts::new(
+            vec![1, 2],
+            vec![1],
+            vec![(1, vec!['A'])],
+            vec![(1, vec![('a', 2)])],
+            vec![Mu::All('a', Box::new(Mu::Lit('A')))],
+        );
+        assert!(!ts.check())
+    }
+
+    #[test]
+    fn test_4() {
+        let ts = Ts::new(
+            vec![1, 2],
+            vec![1],
+            vec![(1, vec!['A'])],
+            vec![(1, vec![('a', 2)])],
+            vec![Mu::Ex('a', Box::new(Mu::Lit('A')))],
+        );
+        assert!(!ts.check())
+    }
+
+    #[test]
+    fn test_5() {
+        let ts = Ts::new(
+            vec![1, 2],
+            vec![1],
+            vec![(1, vec!['A'])],
+            vec![(1, vec![('a', 2)])],
+            vec![Mu::Ex('b', Box::new(Mu::Lit('A')))],
+        );
+        assert!(!ts.check())
+    }
+
+    #[test]
+    fn test_6() {
+        let ts = Ts::new(
+            vec![1, 2, 3],
+            vec![1],
+            vec![(3, vec!['A'])],
+            vec![(1, vec![('a', 2), ('b', 3)])],
+            vec![Mu::Ex('b', Box::new(Mu::Lit('A')))],
+        );
+        assert!(ts.check())
+    }
+
+    #[test]
+    fn test_7() {
+        let phi = Mu::Or(Box::new(Mu::Lit('B')), Box::new(Mu::Lit('C')));
+        let phi = Mu::Or(Box::new(Mu::Lit('A')), Box::new(phi));
+        let phi = Mu::And(Box::new(Mu::Var("X".to_string())), Box::new(phi));
+        let spec = Mu::Gfp("X".to_string(), Box::new(phi));
+        let ts = Ts::new(
+            vec![1, 2, 3],
+            vec![1],
+            vec![(1, vec!['A']), (2, vec!['B']), (3, vec!['C'])],
+            vec![
+                (1, vec![('a', 2)]),
+                (2, vec![('a', 3)]),
+                (3, vec![('a', 1)]),
+            ],
+            vec![spec],
+        );
+        assert!(ts.check());
+    }
+
+    #[test]
+    fn test_8() {
+        let phi = Mu::Or(Box::new(Mu::Lit('B')), Box::new(Mu::Lit('C')));
+        let phi = Mu::Or(Box::new(Mu::Lit('A')), Box::new(phi));
+        let phi = Mu::And(Box::new(Mu::Var("X".to_string())), Box::new(phi));
+        let spec = Mu::Gfp("X".to_string(), Box::new(phi));
+        let ts = Ts::new(
+            vec![1, 2, 3],
+            vec![1],
+            vec![(1, vec!['A']), (2, vec!['B']), (3, vec!['C'])],
+            vec![
+                (1, vec![('a', 2)]),
+                (2, vec![('a', 3)]),
+                (3, vec![('a', 1)]),
+            ],
+            vec![spec],
+        );
+        assert!(ts.check());
     }
 }
