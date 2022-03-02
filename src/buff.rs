@@ -22,19 +22,19 @@ where
         }
     }
 
+    /// Push the current position to the stack
     pub fn save(&mut self) {
         self.stack.push(self.pos);
     }
 
+    /// Pop the last position pushed to the stack
+    /// and set the current position to it
     pub fn restore(&mut self) {
         self.pos = self.stack.pop().unwrap();
     }
 
-    pub fn restore_save(&mut self) {
-        self.restore();
-        self.save();
-    }
-
+    /// Update the top of the stack
+    /// to be the current position
     pub fn update_save(&mut self) {
         self.stack.pop();
         self.stack.push(self.pos);
@@ -46,6 +46,8 @@ where
         self.data.get(self.pos).cloned()
     }
 
+    /// Check if there are still elements to read
+    /// in the buffer
     pub fn is_empty(&self) -> bool {
         self.pos >= self.data.len()
     }
@@ -83,6 +85,8 @@ where
         }
     }
 
+    /// Expect the current element of the buffer to
+    /// satisfies a condition and returns it.
     pub fn expect_cond<P>(&mut self, cond: P) -> Option<T>
     where
         P: FnOnce(&T) -> bool,
@@ -95,6 +99,18 @@ where
         }
     }
 
+    /// Expect the current element of the buffer to
+    /// be convertible.
+    /// The conversion function is expected to return `None` if
+    /// the element is not convertible
+    pub fn expect_convert<U>(&mut self, conv: fn(T) -> Option<U>) -> Option<U> {
+        conv(self.next()?)
+    }
+
+    /// Expect a non-empty sequence of
+    /// elements satisfying a given condition.
+    /// Elements are converted according to a given conversion
+    /// function.
     pub fn convert_while<U>(&mut self, pre: fn(&T) -> bool, conv: fn(T) -> U) -> Option<Vec<U>> {
         let mut list = vec![conv(self.expect_cond(pre)?)];
         self.save();
@@ -106,6 +122,10 @@ where
         Some(list)
     }
 
+    /// Expect a non-empty sequence of
+    /// elements satisfying a given condition.
+    /// The condition is given as a conversion function
+    /// returning `None` if the element violates the condition
     pub fn convert_list<U>(&mut self, conv: fn(T) -> Option<U>) -> Option<Vec<U>> {
         let mut list = vec![conv(self.next()?)?];
         self.save();
@@ -117,6 +137,8 @@ where
         Some(list)
     }
 
+    /// Parse a non-empty list of elements according
+    /// to a parsing function
     pub fn expect_list<U>(&mut self, parse: fn(&mut Buff<T>) -> Option<U>) -> Option<Vec<U>> {
         let mut list = vec![parse(self)?];
         self.save();
@@ -126,10 +148,6 @@ where
         }
         self.restore();
         Some(list)
-    }
-
-    pub fn expect_convert<U>(&mut self, conv: fn(T) -> Option<U>) -> Option<U> {
-        conv(self.next()?)
     }
 
     pub fn expect_end(&self) -> Option<()> {
