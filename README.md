@@ -4,11 +4,11 @@ A tiny symbolic model checker for CTL and μ-calculus
 
 ## Usage
 
-Using Mcmu is really simple. All you have to do is provide a `.input` file containing the description of a transition model as well as its specification.
+Using Mcmu is simple. All you have to do is provide a `.model` file containing the description of a transition system and its specification.
 
 ### Syntax of inputs
 
-Input files describe a transition system and its formal specifications.
+Input files describe a transition system and its specification.
 The states of the system are represented as positive integers. Propositions and actions are represented with strings.
 
 ```scheme
@@ -56,7 +56,7 @@ For now, **Mcmu** supports only specifications written in [μ-calculus](https://
 ### Running the checker
 
 ```
-$ cargo run -- path/to/your/file.input
+$ cargo run -- path/to/your/file.model
 ```
 
 ## Todo
