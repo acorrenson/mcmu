@@ -199,9 +199,10 @@ impl Prog {
         }
         Ok(Ts {
             states: env.states,
-            initials: env.initial,
+            initial: env.initial,
             labels: env.labels,
             transitions: env.transitions,
+            spec: env.spec,
         })
     }
 }
@@ -348,9 +349,10 @@ mod test_prog {
             prog.parse::<Prog>().unwrap().compile(),
             Ok(Ts {
                 states: HashSet::from([1, 2]),
-                initials: HashSet::from([]),
+                initial: HashSet::from([]),
                 labels: HashMap::from([]),
                 transitions: HashMap::from([(1, HashMap::from([("act".to_string(), 2)]))]),
+                spec: vec![]
             })
         )
     }
@@ -362,9 +364,10 @@ mod test_prog {
             prog.parse::<Prog>().unwrap().compile(),
             Ok(Ts {
                 states: HashSet::from([1, 2]),
-                initials: HashSet::from([1]),
+                initial: HashSet::from([1]),
                 labels: HashMap::from([]),
                 transitions: HashMap::from([(1, HashMap::from([("act".to_string(), 2)]))]),
+                spec: vec![]
             })
         )
     }
