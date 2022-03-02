@@ -4,6 +4,7 @@ description = "A tinny model checker for CTL and μ-calculus"
 version = "0.1.0"
 edition = "2021"
 authors = ["Arthur Correnson"]
+documentation = "https://jdrprod.github.io/mcmu/"
 repository = "https://github.com/jdrprod/mcmu/"
 license-file = "LICENSE"
 publish = ["kellnr"]
